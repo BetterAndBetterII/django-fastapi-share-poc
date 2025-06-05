@@ -2,7 +2,7 @@ import pytest
 import base64
 import pickle
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 from main import app, get_django_session_data
 
@@ -21,8 +21,11 @@ def test_health_check():
     """测试健康检查"""
     with patch('main.redis_client') as mock_redis, \
          patch('main.database') as mock_db:
+        # 模拟 Redis ping 方法
         mock_redis.ping.return_value = True
-        mock_db.fetch_one.return_value = [1]
+        
+        # 模拟数据库异步方法
+        mock_db.fetch_one = AsyncMock(return_value=[1])
         
         response = client.get("/health")
         assert response.status_code == 200
