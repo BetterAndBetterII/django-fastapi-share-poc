@@ -51,6 +51,12 @@ def test_invalid_login(django_client):
     assert resp.status_code == 400
 
 
+def test_login_redirect(django_client):
+    resp = django_client.get("/whoami/")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].startswith("/login/?next=/whoami/")
+
+
 def test_session_shared(django_client, fastapi_client):
     resp = django_client.post("/login/", {"username": "alice", "password": "password"})
     assert resp.status_code in (302, 200)
