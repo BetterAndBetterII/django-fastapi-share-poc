@@ -43,7 +43,11 @@ services:
     environment:
       - DEBUG=${DEBUG:-1}
       - SECRET_KEY=${DJANGO_SECRET_KEY:-django_secret_key_for_development}
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-shared_auth_db}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-shared_auth_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - REDIS_URL=redis://redis:6379/0
       - ALLOWED_HOSTS=*
     depends_on:
@@ -51,15 +55,12 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/admin/login/"]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     restart: unless-stopped
 
   fastapi_app:
@@ -74,12 +75,11 @@ services:
     environment:
       - DEBUG=${DEBUG:-1}
       - SECRET_KEY=${FASTAPI_SECRET_KEY:-fastapi_secret_key_for_development}
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-shared_auth_db}
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       redis:
         condition: service_healthy
-      postgres:
+      django_app:
         condition: service_healthy
     command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
@@ -87,7 +87,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     restart: unless-stopped
 
   tests:

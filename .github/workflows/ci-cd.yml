@@ -42,6 +42,17 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     
+    env:
+      # 为GitHub Actions环境设置数据库连接参数
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: shared_auth_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      REDIS_URL: redis://localhost:6379/0
+      DEBUG: True
+      SECRET_KEY: test-secret-key-for-ci
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -57,6 +68,23 @@ jobs:
           pip install -r requirements-django.txt
           pip install -r requirements-fastapi.txt
           pip install -r requirements-tests.txt
+          # 安装测试所需的系统工具
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client redis-tools
+      
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+      
+      - name: Wait for Redis to be ready
+        run: |
+          until redis-cli -h localhost ping; do
+            echo "Waiting for Redis..."
+            sleep 2
+          done
       
       - name: Run Django migrations
         run: |
@@ -73,26 +101,47 @@ jobs:
         run: |
           cd fastapi_app
           pytest -xvs
+  
+  integration-test:
+    name: Run Integration Tests
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
       
-      # 集成测试需要运行中的服务，在Docker Compose环境中进行
       - name: Set up Docker Compose
         uses: docker/setup-buildx-action@v2
       
       - name: Build and run services
         run: |
           docker-compose up -d
-          sleep 10  # 等待服务启动
+          sleep 30  # 等待服务启动并完成初始化
+      
+      - name: Wait for services to be healthy
+        run: |
+          timeout 120 bash -c 'until docker-compose ps | grep -q "healthy"; do sleep 5; done'
       
       - name: Run integration tests
         run: |
           docker-compose run --rm tests
       
+      - name: Show service logs on failure
+        if: failure()
+        run: |
+          docker-compose logs django
+          docker-compose logs fastapi
+          docker-compose logs postgres
+          docker-compose logs redis
+      
       - name: Cleanup
-        run: docker-compose down
+        if: always()
+        run: docker-compose down -v
   
   build-and-push:
     name: Build and Push Docker Images
-    needs: test
+    needs: [test, integration-test]
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
     
