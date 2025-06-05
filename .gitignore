@@ -1,0 +1,3 @@
+__pycache__/
+*.pyc
+myproject/db.sqlite3
