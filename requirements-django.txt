@@ -1,0 +1,8 @@
+Django==4.2.10
+django-redis==5.4.0
+redis==5.0.1
+psycopg2-binary==2.9.9
+pytest==7.4.3
+pytest-django==4.7.0
+requests==2.31.0
+

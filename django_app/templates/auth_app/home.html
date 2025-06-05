@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+    <h2>Welcome to Django & FastAPI Shared Auth Demo</h2>
+    
+    {% if user.is_authenticated %}
+        <p>You are logged in as <strong>{{ user.username }}</strong>.</p>
+        <p>Your session is stored in Redis and can be accessed by both Django and FastAPI applications.</p>
+        <p>Try these links:</p>
+        <ul>
+            <li><a href="{% url 'profile' %}">View your profile in Django</a></li>
+            <li><a href="http://localhost:8001/api/user" target="_blank">Access your user data via FastAPI</a></li>
+            <li><a href="http://localhost:8001/docs" target="_blank">FastAPI Swagger Documentation</a></li>
+        </ul>
+    {% else %}
+        <p>This demo shows how Django and FastAPI can share authentication via Redis sessions.</p>
+        <p>Please <a href="{% url 'login' %}">login</a> or <a href="{% url 'register' %}">register</a> to test the shared authentication.</p>
+    {% endif %}
+    
+    <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+        <h3>How it works</h3>
+        <p>When you log in through Django, your session is stored in Redis. The FastAPI application is configured to read and validate the same session data from Redis.</p>
+        <p>This allows for a seamless authentication experience across both frameworks.</p>
+    </div>
+{% endblock %}
+

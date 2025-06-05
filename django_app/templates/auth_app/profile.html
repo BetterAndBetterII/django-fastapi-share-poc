@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+    <h2>User Profile</h2>
+    <div>
+        <p><strong>Username:</strong> {{ user.username }}</p>
+        <p><strong>Email:</strong> {{ user.email }}</p>
+        <p><strong>Session ID:</strong> {{ session_id }}</p>
+        <p><strong>Last Login:</strong> {{ user.last_login }}</p>
+    </div>
+    <div>
+        <h3>Session Information</h3>
+        <p>This session is stored in Redis and can be accessed by both Django and FastAPI applications.</p>
+        <p>Try accessing the <a href="http://localhost:8001/api/user" target="_blank">FastAPI User API</a> with this same session.</p>
+    </div>
+{% endblock %}
+

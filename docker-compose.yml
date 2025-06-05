@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shared_auth_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  django_app:
+    build:
+      context: .
+      dockerfile: docker/django.Dockerfile
+    image: ${DOCKER_REGISTRY:-ghcr.io}/${DOCKER_NAMESPACE:-betterandbetterii/simplerag}/django-app:${TAG:-latest}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./django_app:/app
+    environment:
+      - DEBUG=${DEBUG:-1}
+      - SECRET_KEY=${DJANGO_SECRET_KEY:-django_secret_key_for_development}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-shared_auth_db}
+      - REDIS_URL=redis://redis:6379/0
+      - ALLOWED_HOSTS=*
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/admin/login/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  fastapi_app:
+    build:
+      context: .
+      dockerfile: docker/fastapi.Dockerfile
+    image: ${DOCKER_REGISTRY:-ghcr.io}/${DOCKER_NAMESPACE:-betterandbetterii/simplerag}/fastapi-app:${TAG:-latest}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./fastapi_app:/app
+    environment:
+      - DEBUG=${DEBUG:-1}
+      - SECRET_KEY=${FASTAPI_SECRET_KEY:-fastapi_secret_key_for_development}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-shared_auth_db}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  tests:
+    build:
+      context: .
+      dockerfile: docker/tests.Dockerfile
+    volumes:
+      - ./tests:/app/tests
+      - ./django_app:/app/django_app
+      - ./fastapi_app:/app/fastapi_app
+    environment:
+      - DJANGO_URL=http://django_app:8000
+      - FASTAPI_URL=http://fastapi_app:8001
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-shared_auth_db}
+    depends_on:
+      django_app:
+        condition: service_healthy
+      fastapi_app:
+        condition: service_healthy
+    command: pytest -xvs
+
+volumes:
+  redis_data:
+  postgres_data:
+
