@@ -33,7 +33,7 @@ app.add_middleware(
 redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 redis_client = redis.from_url(redis_url, decode_responses=False)
 session_cookie_name = "shared_session_id"
-session_prefix = "shared_session:"
+session_prefix = ":1:django.contrib.sessions.cache"
 
 # 配置数据库
 database_url = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/shared_auth_db")
@@ -64,14 +64,17 @@ def get_django_session_data(session_key: str) -> Optional[Dict[str, Any]]:
         # 获取原始session数据
         session_data = redis_client.get(f"{session_prefix}{session_key}")
         if not session_data:
+            logger.info(f"No session data found for key: {session_prefix}{session_key}")
             return None
         
-        # Django使用base64编码和pickle序列化
-        decoded = base64.b64decode(session_data)
-        session_dict = pickle.loads(decoded)
+        # Django使用Redis cache backend时，数据直接用pickle序列化，不使用base64编码
+        session_dict = pickle.loads(session_data)
+        logger.info(f"Successfully decoded Django session: {list(session_dict.keys())}")
         return session_dict
     except Exception as e:
         logger.error(f"Failed to decode Django session: {e}")
+        logger.error(f"Session data type: {type(session_data)}")
+        logger.error(f"Session data preview: {session_data[:100] if session_data else 'None'}")
         return None
 
 

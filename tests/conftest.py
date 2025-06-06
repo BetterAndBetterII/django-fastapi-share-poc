@@ -2,12 +2,13 @@ import os
 import pytest
 import requests
 import time
+import re
 from urllib.parse import urljoin
 
 
 # 服务URL
-DJANGO_URL = os.environ.get("DJANGO_URL", "http://django_app:8000")
-FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://fastapi_app:8001")
+DJANGO_URL = os.environ.get("DJANGO_URL", "http://localhost:8000")
+FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://localhost:8001")
 
 
 @pytest.fixture(scope="session")
@@ -47,22 +48,46 @@ def django_client(wait_for_services):
         
         def get(self, path, **kwargs):
             url = urljoin(self.base_url, path)
-            return self.session.get(url, **kwargs)
+            print(f"Debug: Making GET request to: {url}")
+            try:
+                response = self.session.get(url, **kwargs)
+                print(f"Debug: Response status: {response.status_code}")
+                return response
+            except Exception as e:
+                print(f"Debug: Request failed with error: {e}")
+                raise
         
         def post(self, path, **kwargs):
             url = urljoin(self.base_url, path)
             return self.session.post(url, **kwargs)
         
-        def register(self, username, email, password):
-            """注册新用户"""
-            csrf_response = self.get("/register/")
-            csrf_token = None
+        def _extract_csrf_token(self, html_content):
+            """从HTML内容中提取CSRF令牌"""
+            # 查找CSRF令牌的正则表达式
+            csrf_pattern = r'<input[^>]*name=["\']csrfmiddlewaretoken["\'][^>]*value=["\']([^"\']+)["\']'
+            match = re.search(csrf_pattern, html_content)
+            if match:
+                return match.group(1)
             
-            # 从响应中提取CSRF令牌
+            # 备用方法：从cookie中获取
             for cookie in self.session.cookies:
                 if cookie.name == "csrftoken":
-                    csrf_token = cookie.value
-                    break
+                    return cookie.value
+            
+            return None
+        
+        def register(self, username, email, password):
+            """注册新用户"""
+            # 先测试基本连接
+            health_response = self.get("/")
+            print(f"Debug: Home page status code: {health_response.status_code}")
+            
+            csrf_response = self.get("/register/")
+            print(f"Debug: Register page status code: {csrf_response.status_code}")
+            print(f"Debug: Register page content length: {len(csrf_response.text)}")
+            print(f"Debug: Register page content preview: {csrf_response.text[:500]}")
+            
+            csrf_token = self._extract_csrf_token(csrf_response.text)
             
             if not csrf_token:
                 raise ValueError("Could not extract CSRF token")
@@ -84,13 +109,7 @@ def django_client(wait_for_services):
         def login(self, username, password):
             """登录用户"""
             csrf_response = self.get("/login/")
-            csrf_token = None
-            
-            # 从响应中提取CSRF令牌
-            for cookie in self.session.cookies:
-                if cookie.name == "csrftoken":
-                    csrf_token = cookie.value
-                    break
+            csrf_token = self._extract_csrf_token(csrf_response.text)
             
             if not csrf_token:
                 raise ValueError("Could not extract CSRF token")
